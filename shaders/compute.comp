@@ -1,0 +1,123 @@
+#version 430 core
+// compute.comp - Here's where the actual raytracing happens.
+// Copyright (C) 2022 Trevor Last
+
+layout(local_size_x=1, local_size_y=1, local_size_z=1) in;
+
+layout(rgba32f, binding=0) uniform image2D outputImg;
+
+/**
+ * A Sphere.
+ *  x,y,z - Center of the sphere.
+ *  r - Radius of the sphere.
+ */
+struct Sphere
+{
+    float x, y, z;
+    float r;
+};
+
+layout(std430, binding=1) buffer Spheres
+{
+    Sphere spheres[];
+};
+
+
+/**
+ * Calculate a line-sphere intersection.
+ *  IN
+ *  | c: Sphere center
+ *  | r: Sphere radius
+ *  | o: Ray origin
+ *  | u: Ray direction
+ *
+ *  OUT
+ *  | D: Determinant.
+ *  |   If D < 0, no intersection.
+ *  |   If D = 0, exactly 1 intersection.
+ *  |   If D > 0, 2 intersections.
+ *  | d1: First intersection.
+ *  | d2: Second intersection.
+ */
+void line_sphere_intersection(
+    in vec3 c, in float r, in vec3 o, in vec3 u, out float D, out float d1,
+    out float d2)
+{
+    // Algorithm from
+    // https://en.wikipedia.org/wiki/Line%E2%80%93sphere_intersection
+    float A = dot(u, u);
+    float B = 2 * dot(u, o - c);
+    float C = dot(o - c, o - c) - pow(r, 2);
+    D = pow(B, 2) - 4 * A * C;
+    d1 = (-B + sqrt(D)) / (2 * A);
+    d2 = (-B - sqrt(D)) / (2 * A);
+}
+
+
+void main()
+{
+    // Output pixel texture coordinate.
+    ivec2 pixelCoord = ivec2(gl_GlobalInvocationID.xy);
+    // Output pixel value.
+    vec4 pixel = vec4(0.2, 0.0, 0.2, 1.0);
+
+
+    // Eye position.
+    vec3 E = vec3(0.0, 0.0, 0.0);
+    // FOV (radians).
+    float theta = 3.14159265 / 2.0;
+    // Height, width of the viewport.
+    float m = gl_NumWorkGroups.y;
+    float k = gl_NumWorkGroups.x;
+    // Pixel coordinates.
+    float i = pixelCoord.x;
+    float j = pixelCoord.y;
+    // Up vector.
+    vec3 v = vec3(0.0, 1.0, 0.0);
+    vec3 vn = normalize(v);
+    // Distance to the viewplane.
+    float d = 1.0;
+
+    // Forward vector.
+    vec3 t = vec3(0.0, 0.0, -1.0);
+    vec3 tn = normalize(t);
+    // Side vector.
+    vec3 b = cross(v, t);
+    vec3 bn = normalize(b);
+
+    // Half viewport size.
+    float gx = d * tan(theta / 2.0);
+    float gy = gx * ((m - 1) / (k - 1));
+
+    // Pixel shift vectors.
+    vec3 qx = ((2 * gx) / (k - 1)) * bn;
+    vec3 qy = ((2 * gy) / (m - 1)) * vn;
+    // Bottom left pixel center.
+    vec3 p1m = tn * d - gx * bn - gy * vn;
+
+    // Current pixel center.
+    vec3 pij = p1m + qx * (i - 1) + qy * (j - 1);
+
+
+    // Check for sphere intersections.
+    for (int i = 0; i < spheres.length(); ++i)
+    {
+        Sphere sphere = spheres[i];
+        vec3 c = vec3(sphere.x, sphere.y, sphere.z);
+        float r = sphere.r;
+
+        float D = 0.0;
+        float d1 = 0.0;
+        float d2 = 0.0;
+        line_sphere_intersection(c, r, E, pij, D, d1, d2);
+
+        if (D >= 0.0)
+        {
+            pixel = vec4(0.0, 0.0, 0.0, 1.0);
+            break;
+        }
+    }
+
+    // Write pixel to the output.
+    imageStore(outputImg, pixelCoord, pixel);
+}
