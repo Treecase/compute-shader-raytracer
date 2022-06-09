@@ -17,6 +17,7 @@
  */
 
 #include "glUtil.hpp"
+#include "ShaderStructs.hpp"
 
 #include <GL/glew.h>
 #include <SDL.h>
@@ -176,25 +177,74 @@ int main(int argc, char *argv[])
         GL_TEXTURE_2D, 0, GL_RGBA32F, window_width, window_height, 0, GL_RGBA,
         GL_FLOAT, nullptr);
     glBindImageTexture(0, texture, 0, GL_FALSE, 0, GL_READ_WRITE, GL_RGBA32F);
+    glBindTexture(GL_TEXTURE_2D, 0);
 
     /* ===[ Compute Shader Input Data ]=== */
     // Define the scene.
-    struct
-    {
-        GLfloat x, y, z;
-        GLfloat r;
-    } spheres[2];
-    spheres[0] = {0.0f, 0.0f, -5.0f, 1.0f};
-    spheres[1] = {2.0f, 0.0f, -5.0f, 0.25f};
+    Material default_mat{
+        .specular=1.0f,
+        .diffuse=1.0f,
+        .ambient=1.0f,
+        .shininess=15.0f,
+        .color={1.0f, 1.0f, 1.0f}
+    };
+    Sphere spheres[] = {
+        {
+            .position={0.0f, 0.0f, -2.0f},
+            .r=1.0f,
+            .material=default_mat,
+        },
+        {
+            .position={1.55f, 0.0f, -2.0f},
+            .r=0.25f,
+            .material=default_mat,
+        },
+    };
+    OmniLight lights[] = {
+        {
+            .position={0.0f, 5.0f, -1.0f},
+            .color={0.0f, 1.0f, 0.0f},
+        },
+    };
 
     // Create sphere SSBO.
-    GLuint ssbo = 0;
-    glGenBuffers(1, &ssbo);
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo);
+    GLuint sphere_ssbo = 0;
+    glGenBuffers(1, &sphere_ssbo);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, sphere_ssbo);
     glBufferData(
         GL_SHADER_STORAGE_BUFFER, sizeof(spheres), spheres,
         GL_STATIC_DRAW);
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, ssbo);
+    auto spheres_buffer_binding = glGetProgramResourceIndex(
+        compute_program->id(), GL_SHADER_STORAGE_BLOCK, "Spheres");
+    if (spheres_buffer_binding == GL_INVALID_INDEX)
+    {
+        throw std::runtime_error{
+            "glGetProgramResourceIndex - no shader storage block "
+            "named 'Spheres'"};
+    }
+    glBindBufferBase(
+        GL_SHADER_STORAGE_BUFFER, spheres_buffer_binding, sphere_ssbo);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+
+    // Create lights SSBO.
+    GLuint light_ssbo = 0;
+    glGenBuffers(1, &light_ssbo);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, light_ssbo);
+    glBufferData(
+        GL_SHADER_STORAGE_BUFFER, sizeof(lights), lights,
+        GL_STATIC_DRAW);
+    auto lights_buffer_binding = glGetProgramResourceIndex(
+        compute_program->id(), GL_SHADER_STORAGE_BLOCK, "Lights");
+    if (lights_buffer_binding == GL_INVALID_INDEX)
+    {
+        throw std::runtime_error{
+            "glGetProgramResourceIndex - no shader storage block "
+            "named 'Lights'"};
+    }
+    glBindBufferBase(
+        GL_SHADER_STORAGE_BUFFER, lights_buffer_binding, light_ssbo);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+
 
     /* ===[ Main Loop ]=== */
     for (bool running = true; running;)
@@ -225,14 +275,36 @@ int main(int argc, char *argv[])
         }
 
         /* ===[ Execute Compute Shader ]=== */
-        // Set output texture uniform.
-        glActiveTexture(GL_TEXTURE0);
-        glUniform1i(
-            glGetUniformLocation(compute_program->id(), "outputImg"), 0);
-        // Bind the sphere SSBO.
-        glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo);
         // Use the compute shader.
         compute_program->use();
+        // Set output texture uniform.
+        glActiveTexture(GL_TEXTURE0);
+        try{
+            compute_program->setUniformI("outputImg", 0);
+        }
+        catch (std::runtime_error &e){
+            std::cerr << e.what() << "\n";
+        }
+        // Set ambient color uniform.
+        try{
+            compute_program->setUniformVec3(
+                "ambientColor", glm::vec3{0.0f, 0.05f, 0.1f});
+        }
+        catch (std::runtime_error &e){
+            std::cerr << e.what() << "\n";
+        }
+        // Set blank color.
+        try{
+            compute_program->setUniformVec3(
+                "blankColor", glm::vec3{0.2f, 0.0f, 0.2f});
+        }
+        catch (std::runtime_error &e){
+            std::cerr << e.what() << "\n";
+        }
+        // Bind the sphere SSBO.
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, sphere_ssbo);
+        // Bind the light SSBO.
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, light_ssbo);
         // Run the compute shader.
         glDispatchCompute((GLuint)window_width, (GLuint)window_height, 1);
         // Wait for the shader to finish writing to the image.
@@ -261,7 +333,8 @@ int main(int argc, char *argv[])
     glDeleteVertexArrays(1, &vao);
     glDeleteBuffers(1, &vbo);
     glDeleteTextures(1, &texture);
-    glDeleteBuffers(1, &ssbo);
+    glDeleteBuffers(1, &sphere_ssbo);
+    glDeleteBuffers(1, &light_ssbo);
 
     // Cleanup SDL data.
     SDL_GL_DeleteContext(context);

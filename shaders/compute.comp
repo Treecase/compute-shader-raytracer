@@ -4,7 +4,26 @@
 
 layout(local_size_x=1, local_size_y=1, local_size_z=1) in;
 
-layout(rgba32f, binding=0) uniform image2D outputImg;
+layout(rgba32f) uniform image2D outputImg;
+uniform vec3 ambientColor;
+uniform vec3 blankColor;
+
+/**
+ * Material.
+ *  specular: Specular reflection constant.
+ *  diffuse: Diffuse reflection constant.
+ *  ambient: Ambient reflection constant.
+ *  shininess: How shiny the material is.
+ *            (Higher values = smaller specular highlight)
+ */
+struct Material
+{
+    float specular;
+    float diffuse;
+    float ambient;
+    float shininess;
+    float r, g, b;
+};
 
 /**
  * A Sphere.
@@ -15,11 +34,28 @@ struct Sphere
 {
     float x, y, z;
     float r;
+    Material material;
 };
 
-layout(std430, binding=1) buffer Spheres
+/**
+ * An omnidirectional light.
+ *  x,y,z - Center of the light.
+ *  r,g,b - Color of the light.
+ */
+struct OmniLight
+{
+    float x, y, z;
+    float r, g, b;
+};
+
+layout(std430, binding=0) buffer Spheres
 {
     Sphere spheres[];
+};
+
+layout(std430, binding=1) buffer Lights
+{
+    OmniLight lights[];
 };
 
 
@@ -39,83 +75,185 @@ layout(std430, binding=1) buffer Spheres
  *  | d1: First intersection.
  *  | d2: Second intersection.
  */
-void line_sphere_intersection(
+void lineSphereIntersection(
     in vec3 c, in float r, in vec3 o, in vec3 u, out float D, out float d1,
     out float d2)
 {
-    // Algorithm from
-    // https://en.wikipedia.org/wiki/Line%E2%80%93sphere_intersection
-    float A = dot(u, u);
-    float B = 2 * dot(u, o - c);
-    float C = dot(o - c, o - c) - pow(r, 2);
+    // Algorithm from: https://en.wikipedia.org/wiki/Line%E2%80%93sphere_intersection
+    const float A = dot(u, u);
+    const float B = 2 * dot(u, o - c);
+    const float C = dot(o - c, o - c) - pow(r, 2);
     D = pow(B, 2) - 4 * A * C;
     d1 = (-B + sqrt(D)) / (2 * A);
     d2 = (-B - sqrt(D)) / (2 * A);
 }
 
 
-void main()
+struct RayIntersection
 {
-    // Output pixel texture coordinate.
-    ivec2 pixelCoord = ivec2(gl_GlobalInvocationID.xy);
-    // Output pixel value.
-    vec4 pixel = vec4(0.2, 0.0, 0.2, 1.0);
+    vec3 position;
+    vec3 normal;
+    Sphere object;
+};
 
-
-    // Eye position.
-    vec3 E = vec3(0.0, 0.0, 0.0);
-    // FOV (radians).
-    float theta = 3.14159265 / 2.0;
-    // Height, width of the viewport.
-    float m = gl_NumWorkGroups.y;
-    float k = gl_NumWorkGroups.x;
-    // Pixel coordinates.
-    float i = pixelCoord.x;
-    float j = pixelCoord.y;
-    // Up vector.
-    vec3 v = vec3(0.0, 1.0, 0.0);
-    vec3 vn = normalize(v);
-    // Distance to the viewplane.
-    float d = 1.0;
-
-    // Forward vector.
-    vec3 t = vec3(0.0, 0.0, -1.0);
-    vec3 tn = normalize(t);
-    // Side vector.
-    vec3 b = cross(v, t);
-    vec3 bn = normalize(b);
-
-    // Half viewport size.
-    float gx = d * tan(theta / 2.0);
-    float gy = gx * ((m - 1) / (k - 1));
-
-    // Pixel shift vectors.
-    vec3 qx = ((2 * gx) / (k - 1)) * bn;
-    vec3 qy = ((2 * gy) / (m - 1)) * vn;
-    // Bottom left pixel center.
-    vec3 p1m = tn * d - gx * bn - gy * vn;
-
-    // Current pixel center.
-    vec3 pij = p1m + qx * (i - 1) + qy * (j - 1);
-
+/**
+ * Cast the ray `origin + d*delta` through the scene. Returns true if there was
+ * an intersection, false otherwise.
+ *  IN
+ *  | origin: Origin of the ray.
+ *  | delta: Ray direction.
+ *  OUT
+ *  | intersection: The first intersection (ie. the one closest to `origin`).
+ */
+bool castRayThroughScene(
+    in vec3 origin, in vec3 delta, out RayIntersection intersection)
+{
+    // Note that since we only care about intersections in front of origin, so
+    // negative values are invalid.
+    float nearest_d = -1.0f;
 
     // Check for sphere intersections.
     for (int i = 0; i < spheres.length(); ++i)
     {
         Sphere sphere = spheres[i];
-        vec3 c = vec3(sphere.x, sphere.y, sphere.z);
-        float r = sphere.r;
+        const vec3 c = vec3(sphere.x, sphere.y, sphere.z);
+        const float r = sphere.r;
 
-        float D = 0.0;
-        float d1 = 0.0;
-        float d2 = 0.0;
-        line_sphere_intersection(c, r, E, pij, D, d1, d2);
+        float D, d1, d2;
+        lineSphereIntersection(c, r, origin, delta, D, d1, d2);
 
         if (D >= 0.0)
         {
-            pixel = vec4(0.0, 0.0, 0.0, 1.0);
-            break;
+            // We only care about the closest intersection in front of the
+            // origin, so ignore farther away and behind the origin
+            // intersections.
+            float d = -1.0;
+            if (d1 >= 0.0 && d2 >= 0.0)
+            {
+                d = min(d1, d2);
+            }
+            else if (d1 >= 0.0)
+            {
+                d = d1;
+            }
+            else if (d2 >= 0.0)
+            {
+                d = d2;
+            }
+            else
+            {
+                // Ignore intersections behind the origin.
+                continue;
+            }
+            if (nearest_d < 0.0 || d < nearest_d)
+            {
+                nearest_d = d;
+                intersection.position = origin + d * delta;
+                intersection.normal = intersection.position - c;
+                intersection.object = sphere;
+            }
         }
+    }
+    return nearest_d >= 0.0;
+}
+
+
+/** Calculate the Phong-shaded value of the given intersection. */
+vec3 phongShade(in RayIntersection intersection, in vec3 camera)
+{
+    // Algorithm from: https://en.wikipedia.org/wiki/Phong_reflection_model
+    const Material material = intersection.object.material;
+
+    // Ambient term.
+    vec3 shaded = material.ambient * ambientColor;
+
+    // Normal vector of the surface.
+    const vec3 N = normalize(intersection.normal);
+    // Direction from intersection point to camera.
+    const vec3 V = normalize(camera - intersection.position);
+
+    // Shading from all the lights in the scene.
+    for (int i = 0; i < lights.length(); ++i)
+    {
+        OmniLight light = lights[i];
+        const vec3 lightPos = vec3(light.x, light.y, light.z);
+        const vec3 lightColor = vec3(light.r, light.g, light.b);
+
+        // Direction from intersection point to the light.
+        const vec3 L = normalize(lightPos - intersection.position);
+        // Direction vector of a reflected light ray.
+        const vec3 R = -reflect(L, N);
+
+        // Diffuse term.
+        const float ddp = max(0.0, dot(L, N));
+        const vec3 diffuse = material.diffuse * ddp * lightColor;
+
+        // Specular term.
+        const float sdp = max(0.0, dot(R, V));
+        const vec3 specular = (
+            material.specular
+            * pow(sdp, material.shininess)
+            * vec3(1.0, 1.0, 1.0));
+
+        shaded += diffuse + specular;
+    }
+    return shaded;
+}
+
+
+void main()
+{
+    // Output pixel texture coordinate.
+    const ivec2 pixelCoord = ivec2(gl_GlobalInvocationID.xy);
+    // Output pixel value.
+    vec4 pixel = vec4(blankColor, 1.0);
+
+
+    // Calculate the ray vector.
+    // Algorithm from: https://en.wikipedia.org/wiki/Ray_tracing_(graphics)#Calculate_rays_for_rectangular_viewport
+    // Eye position.
+    const vec3 E = vec3(0.0, 0.0, 0.0);
+    // FOV (in radians).
+    const float theta = radians(90.0);
+    // Height, width of the viewport.
+    const float m = gl_NumWorkGroups.y;
+    const float k = gl_NumWorkGroups.x;
+    // Pixel coordinates.
+    const float i = pixelCoord.x;
+    const float j = pixelCoord.y;
+    // Up vector.
+    const vec3 v = vec3(0.0, 1.0, 0.0);
+    const vec3 vn = normalize(v);
+    // Distance to the viewplane.
+    const float d = 1.0;
+
+    // Forward vector.
+    const vec3 t = vec3(0.0, 0.0, -1.0);
+    const vec3 tn = normalize(t);
+    // Side vector.
+    const vec3 b = cross(v, t);
+    const vec3 bn = normalize(b);
+
+    // Half viewport size.
+    const float gx = d * tan(theta / 2.0);
+    const float gy = gx * ((m - 1) / (k - 1));
+
+    // Pixel shift vectors.
+    const vec3 qx = ((2 * gx) / (k - 1)) * bn;
+    const vec3 qy = ((2 * gy) / (m - 1)) * vn;
+    // Bottom left pixel center.
+    const vec3 p1m = tn * d - gx * bn - gy * vn;
+
+    // Current pixel center.
+    const vec3 pij = p1m + qx * (i - 1) + qy * (j - 1);
+
+
+    // Check for intersections.
+    // If the ray hits something, we light the pixel.
+    RayIntersection intersection;
+    if (castRayThroughScene(E, pij, intersection))
+    {
+        pixel = vec4(phongShade(intersection, E), 1.0);
     }
 
     // Write pixel to the output.

@@ -20,11 +20,15 @@
 #define _GLUTIL_HPP
 
 #include <GL/glew.h>
+#include <glm/glm.hpp>
 
 #include <vector>
 #include <string>
 
 
+/**
+ * OpenGL shader object.
+ */
 class Shader
 {
 private:
@@ -33,19 +37,32 @@ public:
     Shader(GLenum type, std::string source);
     ~Shader();
 
+    /** Get the shader's id. */
     GLuint id() const;
 };
 
+/**
+ * OpenGL program object.
+ */
 class Program
 {
 private:
     GLuint _id;
+    GLint _getUniformLocation(std::string uniform) const;
 public:
     Program(std::vector<Shader> shaders);
     ~Program();
 
+    /** Use the program. */
     void use();
+    /** Get the program's id. */
     GLuint id() const;
+    /** Set a floating-point uniform. */
+    void setUniformF(std::string uniform, GLfloat value) const;
+    /** Set an integer uniform. */
+    void setUniformI(std::string uniform, GLint value) const;
+    /** Set a vector3 uniform. */
+    void setUniformVec3(std::string uniform, glm::vec3 value) const;
 };
 
 #endif

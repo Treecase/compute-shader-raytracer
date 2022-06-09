@@ -19,6 +19,7 @@
 #include "glUtil.hpp"
 
 #include <GL/glew.h>
+#include <glm/gtc/type_ptr.hpp>
 
 #include <stdexcept>
 #include <string>
@@ -63,4 +64,31 @@ void Program::use()
 GLuint Program::id() const
 {
     return _id;
+}
+
+void Program::setUniformF(std::string uniform, GLfloat value) const
+{
+    glUniform1f(_getUniformLocation(uniform), value);
+}
+
+void Program::setUniformI(std::string uniform, GLint value) const
+{
+    glUniform1i(_getUniformLocation(uniform), value);
+}
+
+void Program::setUniformVec3(std::string uniform, glm::vec3 value) const
+{
+    glUniform3fv(_getUniformLocation(uniform), 1, glm::value_ptr(value));
+}
+
+
+GLint Program::_getUniformLocation(std::string uniform) const
+{
+    auto location = glGetUniformLocation(_id, uniform.c_str());
+    if (location == -1)
+    {
+        throw std::runtime_error{
+            "glGetUniformLocation - uniform '" + uniform + "' does not exist"};
+    }
+    return location;
 }
