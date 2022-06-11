@@ -44,10 +44,11 @@ Program::Program(std::vector<Shader> shaders)
     {
         GLint infolog_size = 0;
         glGetProgramiv(_id, GL_INFO_LOG_LENGTH, &infolog_size);
-        GLchar infolog[infolog_size];
-        glGetProgramInfoLog(_id, infolog_size, nullptr, infolog);
-        throw std::runtime_error{
-            "Program link failed:\n" + std::string{infolog} + "\n"};
+        auto infolog_c = new GLchar[infolog_size];
+        glGetProgramInfoLog(_id, infolog_size, nullptr, infolog_c);
+        std::string infolog{infolog_c};
+        delete[] infolog_c;
+        throw std::runtime_error{"Program link failed:\n" + infolog + "\n"};
     }
 }
 

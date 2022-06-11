@@ -28,17 +28,34 @@ set(src
 
 add_executable(compute "${src}")
 
-target_compile_options(compute PRIVATE -Wall -Wextra -g)
+if(MSVC)
+    target_compile_options(compute PRIVATE /W3)
 
-# SDL requirements
-target_link_libraries(compute -lSDL2)
-target_include_directories(compute PRIVATE /usr/include/SDL2)
-target_compile_definitions(compute PRIVATE -D_REENTRANT)
+    # GLM requirements
+    target_include_directories(compute PRIVATE externals/glm)
 
-# GLEW requirements
-target_compile_options(compute PRIVATE -L/usr/local/lib64)
-target_include_directories(compute PRIVATE -I/usr/local/include)
-target_link_libraries(compute -lGLEW)
-target_link_libraries(compute -lGL)
-target_link_libraries(compute -lX11)
-target_link_libraries(compute -lGLU)
+    # SDL requirements
+    target_include_directories(compute PRIVATE externals/SDL2-2.0.22/include)
+    target_link_libraries(compute PRIVATE "../externals/SDL2-2.0.22/lib/x64/SDL2main")
+    target_link_libraries(compute PRIVATE "../externals/SDL2-2.0.22/lib/x64/SDL2")
+
+    # GLEW requirements
+    target_include_directories(compute PRIVATE externals/glew-2.2.0/include)
+    target_link_libraries(compute PRIVATE OpenGL32)
+    target_link_libraries(compute PRIVATE "../externals/glew-2.2.0/lib/Release/x64/glew32")
+else()
+    target_compile_options(compute PRIVATE -Wall -Wextra -g)
+
+    # SDL requirements
+    target_link_libraries(compute -lSDL2)
+    target_include_directories(compute PRIVATE /usr/include/SDL2)
+    target_compile_definitions(compute PRIVATE -D_REENTRANT)
+
+    # GLEW requirements
+    target_compile_options(compute PRIVATE -L/usr/local/lib64)
+    target_include_directories(compute PRIVATE -I/usr/local/include)
+    target_link_libraries(compute -lGLEW)
+    target_link_libraries(compute -lGL)
+    target_link_libraries(compute -lX11)
+    target_link_libraries(compute -lGLU)
+endif()

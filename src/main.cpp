@@ -40,7 +40,11 @@ Shader shader_from_file(std::string path, GLenum type)
 }
 
 
+#ifdef _WIN32
+int SDL_main(int argc, char *argv[])
+#else
 int main(int argc, char *argv[])
+#endif
 {
     int window_width = 640,
         window_height = 480;
@@ -51,7 +55,8 @@ int main(int argc, char *argv[])
     // Set OpenGL context version and profile (4.3 core).
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 4);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+    SDL_GL_SetAttribute(
+        SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
 
     // Create window and OpenGL context.
     auto window = SDL_CreateWindow(
@@ -182,28 +187,28 @@ int main(int argc, char *argv[])
     /* ===[ Compute Shader Input Data ]=== */
     // Define the scene.
     Material default_mat{
-        .specular=1.0f,
-        .diffuse=1.0f,
-        .ambient=1.0f,
-        .shininess=15.0f,
-        .color={1.0f, 1.0f, 1.0f}
+        1.0f,
+        1.0f,
+        1.0f,
+        15.0f,
+        {1.0f, 1.0f, 1.0f}
     };
     Sphere spheres[] = {
         {
-            .position={0.0f, 0.0f, -2.0f},
-            .r=1.0f,
-            .material=default_mat,
+            {0.0f, 0.0f, -2.0f},
+            1.0f,
+            default_mat,
         },
         {
-            .position={1.55f, 0.0f, -2.0f},
-            .r=0.25f,
-            .material=default_mat,
+            {1.55f, 0.0f, -2.0f},
+            0.25f,
+            default_mat,
         },
     };
     OmniLight lights[] = {
         {
-            .position={0.0f, 5.0f, -1.0f},
-            .color={0.0f, 1.0f, 0.0f},
+            {0.0f, 5.0f, -1.0f},
+            {0.0f, 1.0f, 0.0f},
         },
     };
 
@@ -218,9 +223,9 @@ int main(int argc, char *argv[])
         compute_program->id(), GL_SHADER_STORAGE_BLOCK, "Spheres");
     if (spheres_buffer_binding == GL_INVALID_INDEX)
     {
-        throw std::runtime_error{
-            "glGetProgramResourceIndex - no shader storage block "
-            "named 'Spheres'"};
+        std::cerr << "glGetProgramResourceIndex - no shader storage block "
+            "named 'Spheres'\n";
+        return EXIT_FAILURE;
     }
     glBindBufferBase(
         GL_SHADER_STORAGE_BUFFER, spheres_buffer_binding, sphere_ssbo);
@@ -237,9 +242,9 @@ int main(int argc, char *argv[])
         compute_program->id(), GL_SHADER_STORAGE_BLOCK, "Lights");
     if (lights_buffer_binding == GL_INVALID_INDEX)
     {
-        throw std::runtime_error{
-            "glGetProgramResourceIndex - no shader storage block "
-            "named 'Lights'"};
+        std::cerr << "glGetProgramResourceIndex - no shader storage block "
+            "named 'Lights'\n";
+        return EXIT_FAILURE;
     }
     glBindBufferBase(
         GL_SHADER_STORAGE_BUFFER, lights_buffer_binding, light_ssbo);

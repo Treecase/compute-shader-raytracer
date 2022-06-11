@@ -36,10 +36,11 @@ Shader::Shader(GLenum type, std::string source)
     {
         GLint infolog_size = 0;
         glGetShaderiv(_id, GL_INFO_LOG_LENGTH, &infolog_size);
-        GLchar infolog[infolog_size];
-        glGetShaderInfoLog(_id, infolog_size, nullptr, infolog);
-        throw std::runtime_error{
-            "Shader compile failed:\n" + std::string{infolog}};
+        auto infolog_c = new GLchar[infolog_size];
+        glGetShaderInfoLog(_id, infolog_size, nullptr, infolog_c);
+        std::string infolog{infolog_c};
+        delete[] infolog_c;
+        throw std::runtime_error{"Shader compile failed:\n" + infolog};
     }
 }
 
