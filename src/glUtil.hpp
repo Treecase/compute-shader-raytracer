@@ -22,8 +22,30 @@
 #include <GL/glew.h>
 #include <glm/glm.hpp>
 
-#include <vector>
+#include <memory>
 #include <string>
+#include <vector>
+
+
+/* ===[ Deleters ]=== */
+/**
+ * Deleter for Shader objects.
+ * (For use with shared_ptr and co.)
+ */
+struct ShaderDeleter
+{
+    void operator()(GLuint *id);
+};
+
+/**
+ * Deleter for Program objects.
+ * (For use with shared_ptr and co.)
+ */
+struct ProgramDeleter
+{
+    void operator()(GLuint *id);
+};
+
 
 
 /**
@@ -32,10 +54,9 @@
 class Shader
 {
 private:
-    GLuint _id;
+    std::shared_ptr<GLuint> const _id;
 public:
     Shader(GLenum type, std::string source);
-    ~Shader();
 
     /** Get the shader's id. */
     GLuint id() const;
@@ -47,14 +68,13 @@ public:
 class Program
 {
 private:
-    GLuint _id;
+    std::shared_ptr<GLuint> const _id;
     GLint _getUniformLocation(std::string uniform) const;
 public:
     Program(std::vector<Shader> shaders);
-    ~Program();
 
     /** Use the program. */
-    void use();
+    void use() const;
     /** Get the program's id. */
     GLuint id() const;
     /** Set a floating-point uniform. */

@@ -24,32 +24,33 @@
 #include <string>
 
 
+void ShaderDeleter::operator()(GLuint *shader)
+{
+    glDeleteShader(*shader);
+    delete shader;
+}
+
+
 Shader::Shader(GLenum type, std::string source)
-:   _id{glCreateShader(type)}
+:   _id{new GLuint{glCreateShader(type)}, ShaderDeleter{}}
 {
     GLchar const *const src = source.c_str();
-    glShaderSource(_id, 1, &src, nullptr);
-    glCompileShader(_id);
+    glShaderSource(*_id, 1, &src, nullptr);
+    glCompileShader(*_id);
     GLint success = 0;
-    glGetShaderiv(_id, GL_COMPILE_STATUS, &success);
-    if (!success)
+    glGetShaderiv(*_id, GL_COMPILE_STATUS, &success);
+    if (success == GL_FALSE)
     {
         GLint infolog_size = 0;
-        glGetShaderiv(_id, GL_INFO_LOG_LENGTH, &infolog_size);
-        auto infolog_c = new GLchar[infolog_size];
-        glGetShaderInfoLog(_id, infolog_size, nullptr, infolog_c);
-        std::string infolog{infolog_c};
-        delete[] infolog_c;
+        glGetShaderiv(*_id, GL_INFO_LOG_LENGTH, &infolog_size);
+        std::string infolog{};
+        infolog.reserve(infolog_size);
+        glGetShaderInfoLog(*_id, infolog_size, nullptr, &infolog[0]);
         throw std::runtime_error{"Shader compile failed:\n" + infolog};
     }
 }
 
-Shader::~Shader()
-{
-    glDeleteShader(_id);
-}
-
 GLuint Shader::id() const
 {
-    return _id;
+    return *_id;
 }

@@ -35,8 +35,7 @@ Shader shader_from_file(std::string path, GLenum type)
     std::stringstream srcstream{};
     srcstream << shaderfile.rdbuf();
     shaderfile.close();
-    auto source = srcstream.str();
-    return Shader{type, source};
+    return Shader{type, srcstream.str()};
 }
 
 

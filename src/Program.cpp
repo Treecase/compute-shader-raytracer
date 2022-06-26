@@ -26,45 +26,46 @@
 #include <vector>
 
 
+void ProgramDeleter::operator()(GLuint *program)
+{
+    glDeleteProgram(*program);
+    delete program;
+}
+
+
 Program::Program(std::vector<Shader> shaders)
-:   _id{glCreateProgram()}
+:   _id{new GLuint{glCreateProgram()}, ProgramDeleter{}}
 {
     for (auto shader : shaders)
     {
-        glAttachShader(_id, shader.id());
+        glAttachShader(*_id, shader.id());
     }
-    glLinkProgram(_id);
+    glLinkProgram(*_id);
     for (auto shader : shaders)
     {
-        glDetachShader(_id, shader.id());
+        glDetachShader(*_id, shader.id());
     }
     GLint success = 0;
-    glGetProgramiv(_id, GL_LINK_STATUS, &success);
-    if (!success)
+    glGetProgramiv(*_id, GL_LINK_STATUS, &success);
+    if (success == GL_FALSE)
     {
         GLint infolog_size = 0;
-        glGetProgramiv(_id, GL_INFO_LOG_LENGTH, &infolog_size);
-        auto infolog_c = new GLchar[infolog_size];
-        glGetProgramInfoLog(_id, infolog_size, nullptr, infolog_c);
-        std::string infolog{infolog_c};
-        delete[] infolog_c;
+        glGetProgramiv(*_id, GL_INFO_LOG_LENGTH, &infolog_size);
+        std::string infolog{};
+        infolog.reserve(infolog_size);
+        glGetProgramInfoLog(*_id, infolog_size, nullptr, &infolog[0]);
         throw std::runtime_error{"Program link failed:\n" + infolog + "\n"};
     }
 }
 
-Program::~Program()
+void Program::use() const
 {
-    glDeleteProgram(_id);
-}
-
-void Program::use()
-{
-    glUseProgram(_id);
+    glUseProgram(*_id);
 }
 
 GLuint Program::id() const
 {
-    return _id;
+    return *_id;
 }
 
 void Program::setUniformF(std::string uniform, GLfloat value) const
@@ -85,7 +86,7 @@ void Program::setUniformVec3(std::string uniform, glm::vec3 value) const
 
 GLint Program::_getUniformLocation(std::string uniform) const
 {
-    auto location = glGetUniformLocation(_id, uniform.c_str());
+    auto location = glGetUniformLocation(*_id, uniform.c_str());
     if (location == -1)
     {
         throw std::runtime_error{
