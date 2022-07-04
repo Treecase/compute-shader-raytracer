@@ -24,7 +24,7 @@
 #include <string>
 
 
-void ShaderDeleter::operator()(GLuint *shader)
+void _shader_delete(GLuint *shader)
 {
     glDeleteShader(*shader);
     delete shader;
@@ -32,7 +32,7 @@ void ShaderDeleter::operator()(GLuint *shader)
 
 
 Shader::Shader(GLenum type, std::string source)
-:   _id{new GLuint{glCreateShader(type)}, ShaderDeleter{}}
+:   _id{new GLuint{glCreateShader(type)}, _shader_delete}
 {
     GLchar const *const src = source.c_str();
     glShaderSource(*_id, 1, &src, nullptr);

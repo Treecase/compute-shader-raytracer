@@ -24,6 +24,9 @@ set(src
     src/main.cpp
     src/Shader.cpp
     src/Program.cpp
+    src/Buffer.cpp
+    src/VertexArray.cpp
+    src/Texture.cpp
 )
 
 add_executable(compute "${src}")

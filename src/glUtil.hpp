@@ -28,23 +28,20 @@
 
 
 /* ===[ Deleters ]=== */
-/**
- * Deleter for Shader objects.
- * (For use with shared_ptr and co.)
- */
-struct ShaderDeleter
-{
-    void operator()(GLuint *id);
-};
+/** Deleter for Shader objects. (For use with shared_ptr and co.) */
+void _shader_delete(GLuint *shader);
 
-/**
- * Deleter for Program objects.
- * (For use with shared_ptr and co.)
- */
-struct ProgramDeleter
-{
-    void operator()(GLuint *id);
-};
+/** Deleter for Program objects. (For use with shared_ptr and co.) */
+void _program_delete(GLuint *program);
+
+/** Deleter for Buffer objects. (For use with shared_ptr and co.) */
+void _buffer_delete(GLuint *buffer);
+
+/** Deleter for VertexArray objects. (For use with shared_ptr and co.) */
+void _vertex_array_delete(GLuint *vertexarray);
+
+/** Deleter for Texture objects. (For use with shared_ptr and co.) */
+void _texture_delete(GLuint *texture);
 
 
 
@@ -83,6 +80,57 @@ public:
     void setUniformI(std::string uniform, GLint value) const;
     /** Set a vector3 uniform. */
     void setUniformVec3(std::string uniform, glm::vec3 value) const;
+};
+
+/**
+ * OpenGL buffer object.
+ */
+class Buffer
+{
+private:
+    std::shared_ptr<GLuint> const _id;
+public:
+    Buffer();
+
+    /** Get the buffer's id. */
+    GLuint id() const;
+
+    /** Bind the buffer. */
+    void bind(GLenum target) const;
+};
+
+/**
+ * OpenGL vertex array object.
+ */
+class VertexArray
+{
+private:
+    std::shared_ptr<GLuint> const _id;
+public:
+    VertexArray();
+
+    /** Get the vertex array's id. */
+    GLuint id() const;
+
+    /** Bind the vertex array. */
+    void bind() const;
+};
+
+/**
+ * OpenGL texture object.
+ */
+class Texture
+{
+private:
+    std::shared_ptr<GLuint> const _id;
+public:
+    Texture();
+
+    /** Get the texture's id. */
+    GLuint id() const;
+
+    /** Bind the texture. */
+    void bind(GLenum target) const;
 };
 
 #endif

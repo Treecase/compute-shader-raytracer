@@ -67,7 +67,6 @@ public:
         SDL_DestroyWindow(_window);
     }
 
-
     /** Set up an event callback. */
     void add_callback(
         SDL_EventType event, std::function<void(SDL_Event)> callback)
@@ -76,7 +75,6 @@ public:
             {event, std::vector<std::function<void(SDL_Event)>>{}});
         _event_callbacks[event].push_back(callback);
     }
-
 
     /** Handle input events. */
     void input()
@@ -201,11 +199,8 @@ void init_OpenGL()
 }
 
 
-#ifdef _WIN32
-int SDL_main(int argc, char *argv[])
-#else
-int main(int argc, char *argv[])
-#endif
+/** Main program body. */
+int run(int argc, char *argv[])
 {
     /* ===[ Initialization ]=== */
     init_SDL();
@@ -218,31 +213,13 @@ int main(int argc, char *argv[])
 
 
     /* ===[ Compute Shader ]=== */
-    Program *compute_program = nullptr;
-    try
-    {
-        compute_program = new Program{
-            {shader_from_file("shaders/compute.comp", GL_COMPUTE_SHADER)}};
-    }
-    catch (std::runtime_error const &e)
-    {
-        std::cerr << e.what() << '\n';
-        return EXIT_FAILURE;
-    }
+    auto compute_program = new Program{
+        {shader_from_file("shaders/compute.comp", GL_COMPUTE_SHADER)}};
 
     /* ===[ Visual Shader ]=== */
-    Program *visual_program = nullptr;
-    try
-    {
-        visual_program = new Program{{
-            shader_from_file("shaders/vertex.vert", GL_VERTEX_SHADER),
-            shader_from_file("shaders/fragment.frag", GL_FRAGMENT_SHADER)}};
-    }
-    catch (std::runtime_error const &e)
-    {
-        std::cerr << e.what() << '\n';
-        return EXIT_FAILURE;
-    }
+    auto visual_program = new Program{{
+        shader_from_file("shaders/vertex.vert", GL_VERTEX_SHADER),
+        shader_from_file("shaders/fragment.frag", GL_FRAGMENT_SHADER)}};
 
     /* ===[ Screen Quad ]=== */
     GLfloat const vertices[] = {
@@ -257,13 +234,11 @@ int main(int argc, char *argv[])
        -1.0f,  1.0f, 0.0f,  0.0f, 1.0f, // tl
     };
     // Create screen quad VAO.
-    GLuint vao = 0;
-    glGenVertexArrays(1, &vao);
-    glBindVertexArray(vao);
+    VertexArray vao{};
+    vao.bind();
     // Create vertex data buffer.
-    GLuint vbo = 0;
-    glGenBuffers(1, &vbo);
-    glBindBuffer(GL_ARRAY_BUFFER, vbo);
+    Buffer vbo{};
+    vbo.bind(GL_ARRAY_BUFFER);
     glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
     // Link position vertex attribute.
     glVertexAttribPointer(
@@ -278,9 +253,8 @@ int main(int argc, char *argv[])
     glBindVertexArray(0);
 
     /* ===[ Compute Shader Output Texture ]=== */
-    GLuint texture = 0;
-    glGenTextures(1, &texture);
-    glBindTexture(GL_TEXTURE_2D, texture);
+    Texture texture{};
+    texture.bind(GL_TEXTURE_2D);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
@@ -288,7 +262,8 @@ int main(int argc, char *argv[])
     glTexImage2D(
         GL_TEXTURE_2D, 0, GL_RGBA32F, app.window_width, app.window_height, 0,
         GL_RGBA, GL_FLOAT, nullptr);
-    glBindImageTexture(0, texture, 0, GL_FALSE, 0, GL_READ_WRITE, GL_RGBA32F);
+    glBindImageTexture(
+        0, texture.id(), 0, GL_FALSE, 0, GL_READ_WRITE, GL_RGBA32F);
     glBindTexture(GL_TEXTURE_2D, 0);
     // Since the compute shader's output texture must match the window size, we
     // must resize it whenever the app's window size changes.
@@ -297,7 +272,7 @@ int main(int argc, char *argv[])
         [&texture](SDL_Event event){
             if (event.window.event == SDL_WINDOWEVENT_RESIZED)
             {
-                glBindTexture(GL_TEXTURE_2D, texture);
+                texture.bind(GL_TEXTURE_2D);
                 glTexImage2D(
                     GL_TEXTURE_2D, 0, GL_RGBA32F, event.window.data1,
                     event.window.data2, 0, GL_RGBA, GL_FLOAT, nullptr);
@@ -334,41 +309,37 @@ int main(int argc, char *argv[])
     };
 
     // Create sphere SSBO.
-    GLuint sphere_ssbo = 0;
-    glGenBuffers(1, &sphere_ssbo);
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, sphere_ssbo);
+    Buffer sphere_ssbo{};
+    sphere_ssbo.bind(GL_SHADER_STORAGE_BUFFER);
     glBufferData(
-        GL_SHADER_STORAGE_BUFFER, sizeof(spheres), spheres,
-        GL_STATIC_DRAW);
+        GL_SHADER_STORAGE_BUFFER, sizeof(spheres), spheres, GL_STATIC_DRAW);
     auto spheres_buffer_binding = glGetProgramResourceIndex(
         compute_program->id(), GL_SHADER_STORAGE_BLOCK, "Spheres");
     if (spheres_buffer_binding == GL_INVALID_INDEX)
     {
-        std::cerr << "glGetProgramResourceIndex - no shader storage block "
-            "named 'Spheres'\n";
-        return EXIT_FAILURE;
+        throw std::runtime_error{
+            "glGetProgramResourceIndex - no shader storage block named "
+            "'Spheres'"};
     }
     glBindBufferBase(
-        GL_SHADER_STORAGE_BUFFER, spheres_buffer_binding, sphere_ssbo);
+        GL_SHADER_STORAGE_BUFFER, spheres_buffer_binding, sphere_ssbo.id());
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 
     // Create lights SSBO.
-    GLuint light_ssbo = 0;
-    glGenBuffers(1, &light_ssbo);
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, light_ssbo);
+    Buffer light_ssbo{};
+    light_ssbo.bind(GL_SHADER_STORAGE_BUFFER);
     glBufferData(
-        GL_SHADER_STORAGE_BUFFER, sizeof(lights), lights,
-        GL_STATIC_DRAW);
+        GL_SHADER_STORAGE_BUFFER, sizeof(lights), lights, GL_STATIC_DRAW);
     auto lights_buffer_binding = glGetProgramResourceIndex(
         compute_program->id(), GL_SHADER_STORAGE_BLOCK, "Lights");
     if (lights_buffer_binding == GL_INVALID_INDEX)
     {
-        std::cerr << "glGetProgramResourceIndex - no shader storage block "
-            "named 'Lights'\n";
-        return EXIT_FAILURE;
+        throw std::runtime_error{
+            "glGetProgramResourceIndex - no shader storage block named "
+            "'Lights'"};
     }
     glBindBufferBase(
-        GL_SHADER_STORAGE_BUFFER, lights_buffer_binding, light_ssbo);
+        GL_SHADER_STORAGE_BUFFER, lights_buffer_binding, light_ssbo.id());
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 
 
@@ -383,32 +354,32 @@ int main(int argc, char *argv[])
         compute_program->use();
         // Set output texture uniform.
         glActiveTexture(GL_TEXTURE0);
-        try{
+        try {
             compute_program->setUniformI("outputImg", 0);
         }
-        catch (std::runtime_error &e){
+        catch (std::runtime_error const &e) {
             std::cerr << e.what() << "\n";
         }
         // Set ambient color uniform.
-        try{
+        try {
             compute_program->setUniformVec3(
                 "ambientColor", glm::vec3{0.0f, 0.05f, 0.1f});
         }
-        catch (std::runtime_error &e){
+        catch (std::runtime_error const &e) {
             std::cerr << e.what() << "\n";
         }
         // Set blank color.
-        try{
+        try {
             compute_program->setUniformVec3(
                 "blankColor", glm::vec3{0.2f, 0.0f, 0.2f});
         }
-        catch (std::runtime_error &e){
+        catch (std::runtime_error const &e) {
             std::cerr << e.what() << "\n";
         }
         // Bind the sphere SSBO.
-        glBindBuffer(GL_SHADER_STORAGE_BUFFER, sphere_ssbo);
+        sphere_ssbo.bind(GL_SHADER_STORAGE_BUFFER);
         // Bind the light SSBO.
-        glBindBuffer(GL_SHADER_STORAGE_BUFFER, light_ssbo);
+        light_ssbo.bind(GL_SHADER_STORAGE_BUFFER);
         // Run the compute shader.
         glDispatchCompute(
             (GLuint)app.window_width, (GLuint)app.window_height, 1);
@@ -422,27 +393,43 @@ int main(int argc, char *argv[])
         // Use the screenquad shader.
         visual_program->use();
         // Bind screenquad VAO.
-        glBindVertexArray(vao);
+        vao.bind();
         // Use the compute output texture as the input texture.
         glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, texture);
+        texture.bind(GL_TEXTURE_2D);
         visual_program->setUniformI("tex", 0);
         // Render the screenquad.
-        glDrawArrays(GL_TRIANGLES, 0, sizeof(vertices)/sizeof(*vertices));
+        glDrawArrays(GL_TRIANGLES, 0, (sizeof(vertices)/sizeof(*vertices))/5);
 
         // Refresh the screen.
         app.render();
     }
 
-    // Cleanup OpenGL data.
-    glDeleteVertexArrays(1, &vao);
-    glDeleteBuffers(1, &vbo);
-    glDeleteTextures(1, &texture);
-    glDeleteBuffers(1, &sphere_ssbo);
-    glDeleteBuffers(1, &light_ssbo);
-
     // Shutdown SDL.
     SDL_Quit();
-
     return EXIT_SUCCESS;
+}
+
+
+/** Program entry point. */
+#ifdef _WIN32
+int SDL_main(int argc, char *argv[])
+#else
+int main(int argc, char *argv[])
+#endif
+{
+    try
+    {
+        return run(argc, argv);
+    }
+    catch (std::exception const &e)
+    {
+        int err = SDL_ShowSimpleMessageBox(
+            SDL_MESSAGEBOX_ERROR, "Error", e.what(), nullptr);
+        if (err != 0)
+        {
+            std::cerr << e.what() << "\n";
+        }
+        return EXIT_FAILURE;
+    }
 }

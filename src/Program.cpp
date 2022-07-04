@@ -26,7 +26,7 @@
 #include <vector>
 
 
-void ProgramDeleter::operator()(GLuint *program)
+void _program_delete(GLuint *program)
 {
     glDeleteProgram(*program);
     delete program;
@@ -34,7 +34,7 @@ void ProgramDeleter::operator()(GLuint *program)
 
 
 Program::Program(std::vector<Shader> shaders)
-:   _id{new GLuint{glCreateProgram()}, ProgramDeleter{}}
+:   _id{new GLuint{glCreateProgram()}, _program_delete}
 {
     for (auto shader : shaders)
     {
