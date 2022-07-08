@@ -33,7 +33,7 @@ void _program_delete(GLuint *program)
 }
 
 
-Program::Program(std::vector<Shader> shaders)
+Program::Program(std::vector<Shader> shaders, std::string label)
 :   _id{new GLuint{glCreateProgram()}, _program_delete}
 {
     for (auto shader : shaders)
@@ -56,6 +56,10 @@ Program::Program(std::vector<Shader> shaders)
         glGetProgramInfoLog(*_id, infolog_size, nullptr, &infolog[0]);
         throw std::runtime_error{"Program link failed:\n" + infolog + "\n"};
     }
+    if (!label.empty())
+    {
+        glObjectLabel(GL_PROGRAM, *_id, (GLsizei)label.size(), label.c_str());
+    }
 }
 
 void Program::use() const
@@ -68,19 +72,34 @@ GLuint Program::id() const
     return *_id;
 }
 
-void Program::setUniformF(std::string uniform, GLfloat value) const
+void Program::setUniform(std::string uniform, GLfloat value) const
 {
     glUniform1f(_getUniformLocation(uniform), value);
 }
 
-void Program::setUniformI(std::string uniform, GLint value) const
+void Program::setUniform(std::string uniform, GLint value) const
 {
     glUniform1i(_getUniformLocation(uniform), value);
 }
 
-void Program::setUniformVec3(std::string uniform, glm::vec3 value) const
+void Program::setUniform(std::string uniform, GLuint value) const
+{
+    glUniform1ui(_getUniformLocation(uniform), value);
+}
+
+void Program::setUniform(std::string uniform, glm::vec2 value) const
+{
+    glUniform2fv(_getUniformLocation(uniform), 1, glm::value_ptr(value));
+}
+
+void Program::setUniform(std::string uniform, glm::vec3 value) const
 {
     glUniform3fv(_getUniformLocation(uniform), 1, glm::value_ptr(value));
+}
+
+void Program::setUniform(std::string uniform, glm::vec4 value) const
+{
+    glUniform4fv(_getUniformLocation(uniform), 1, glm::value_ptr(value));
 }
 
 

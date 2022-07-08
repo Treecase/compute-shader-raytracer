@@ -53,7 +53,7 @@ class Shader
 private:
     std::shared_ptr<GLuint> const _id;
 public:
-    Shader(GLenum type, std::string source);
+    Shader(GLenum type, std::string source, std::string label="");
 
     /** Get the shader's id. */
     GLuint id() const;
@@ -68,18 +68,24 @@ private:
     std::shared_ptr<GLuint> const _id;
     GLint _getUniformLocation(std::string uniform) const;
 public:
-    Program(std::vector<Shader> shaders);
+    Program(std::vector<Shader> shaders, std::string label="");
 
     /** Use the program. */
     void use() const;
     /** Get the program's id. */
     GLuint id() const;
     /** Set a floating-point uniform. */
-    void setUniformF(std::string uniform, GLfloat value) const;
+    void setUniform(std::string uniform, GLfloat value) const;
     /** Set an integer uniform. */
-    void setUniformI(std::string uniform, GLint value) const;
-    /** Set a vector3 uniform. */
-    void setUniformVec3(std::string uniform, glm::vec3 value) const;
+    void setUniform(std::string uniform, GLint value) const;
+    /** Set an unsigned integer uniform. */
+    void setUniform(std::string uniform, GLuint value) const;
+    /** Set a vec2 uniform. */
+    void setUniform(std::string uniform, glm::vec2 value) const;
+    /** Set a vec3 uniform. */
+    void setUniform(std::string uniform, glm::vec3 value) const;
+    /** Set a vec4 uniform. */
+    void setUniform(std::string uniform, glm::vec4 value) const;
 };
 
 /**
@@ -90,13 +96,31 @@ class Buffer
 private:
     std::shared_ptr<GLuint> const _id;
 public:
-    Buffer();
+    GLenum target;
+
+    /**
+     * WARNING: Creating a Buffer will also cause it to be bound to the passed
+     * target!
+     */
+    Buffer(GLenum target, std::string label="");
 
     /** Get the buffer's id. */
     GLuint id() const;
 
-    /** Bind the buffer. */
-    void bind(GLenum target) const;
+    /**
+     * Bind the buffer. If target is GL_NONE (the default) then this will bind
+     * to the last used target.
+     */
+    void bind(GLenum target=GL_NONE);
+    /** Unbind the buffer. */
+    void unbind();
+
+    /** Add data to the buffer. NOTE: The Buffer must be bound first! */
+    template<typename T>
+    void buffer(GLenum usage, std::vector<T> const &data)
+    {
+        glBufferData(target, data.size() * sizeof(T), data.data(), usage);
+    }
 };
 
 /**
@@ -107,13 +131,20 @@ class VertexArray
 private:
     std::shared_ptr<GLuint> const _id;
 public:
-    VertexArray();
+    VertexArray(std::string label="");
 
     /** Get the vertex array's id. */
     GLuint id() const;
 
     /** Bind the vertex array. */
     void bind() const;
+    /** Unbind the vertex array. */
+    void unbind() const;
+
+    /** Enable and associate a vertex attrib array. (By index) */
+    void enableVertexAttribArray(
+        GLuint index, GLint components, GLenum dataType, GLsizei stride=0,
+        size_t offset=0, bool normalized=false) const;
 };
 
 /**
@@ -123,14 +154,24 @@ class Texture
 {
 private:
     std::shared_ptr<GLuint> const _id;
+    GLenum const _type;
 public:
-    Texture();
+    /**
+     * WARNING: Creating a Texture will also cause it to be bound to the passed
+     * target!
+     */
+    Texture(GLenum type, std::string label="");
 
     /** Get the texture's id. */
     GLuint id() const;
 
+    /** Get the texture's type. */
+    GLuint type() const;
+
     /** Bind the texture. */
-    void bind(GLenum target) const;
+    void bind() const;
+    /** Unbind the texture. */
+    void unbind() const;
 };
 
 #endif

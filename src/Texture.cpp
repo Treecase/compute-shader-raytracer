@@ -28,10 +28,16 @@ void _texture_delete(GLuint *texture)
 }
 
 
-Texture::Texture()
+Texture::Texture(GLenum type, std::string label)
 :   _id{new GLuint{0}, _texture_delete}
+,   _type{type}
 {
     glGenTextures(1, _id.get());
+    glBindTexture(type, *_id);
+    if (!label.empty())
+    {
+        glObjectLabel(GL_TEXTURE, *_id, (GLsizei)label.size(), label.c_str());
+    }
 }
 
 GLuint Texture::id() const
@@ -39,7 +45,17 @@ GLuint Texture::id() const
     return *_id;
 }
 
-void Texture::bind(GLenum target) const
+GLuint Texture::type() const
 {
-    glBindTexture(target, *_id);
+    return _type;
+}
+
+void Texture::bind() const
+{
+    glBindTexture(_type, *_id);
+}
+
+void Texture::unbind() const
+{
+    glBindTexture(_type, 0);
 }

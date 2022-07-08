@@ -28,10 +28,15 @@ void _vertex_array_delete(GLuint *vertexarray)
 }
 
 
-VertexArray::VertexArray()
+VertexArray::VertexArray(std::string label)
 :   _id{new GLuint{0}, _vertex_array_delete}
 {
     glCreateVertexArrays(1, _id.get());
+    if (!label.empty())
+    {
+        glObjectLabel(
+            GL_VERTEX_ARRAY, *_id, (GLsizei)label.size(), label.c_str());
+    }
 }
 
 GLuint VertexArray::id() const
@@ -42,4 +47,19 @@ GLuint VertexArray::id() const
 void VertexArray::bind() const
 {
     glBindVertexArray(*_id);
+}
+
+void VertexArray::unbind() const
+{
+    glBindVertexArray(0);
+}
+
+void VertexArray::enableVertexAttribArray(
+    GLuint index, GLint components, GLenum dataType, GLsizei stride,
+    size_t offset, bool normalized) const
+{
+    glVertexAttribPointer(
+        index, components, dataType, normalized? GL_TRUE : GL_FALSE, stride,
+        (void *)offset);
+    glEnableVertexAttribArray(index);
 }

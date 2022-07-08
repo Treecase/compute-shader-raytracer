@@ -28,10 +28,16 @@ void _buffer_delete(GLuint *buffer)
 }
 
 
-Buffer::Buffer()
+Buffer::Buffer(GLenum target, std::string label)
 :   _id{new GLuint{0}, _buffer_delete}
+,   target{target}
 {
     glCreateBuffers(1, _id.get());
+    glBindBuffer(target, *_id);
+    if (!label.empty())
+    {
+        glObjectLabel(GL_BUFFER, *_id, (GLsizei)label.size(), label.c_str());
+    }
 }
 
 GLuint Buffer::id() const
@@ -39,7 +45,14 @@ GLuint Buffer::id() const
     return *_id;
 }
 
-void Buffer::bind(GLenum target) const
+void Buffer::bind(GLenum target_)
 {
-    glBindBuffer(target, *_id);
+    GLenum const bound = target_ == GL_NONE? target : target_;
+    glBindBuffer(bound, *_id);
+    target = bound;
+}
+
+void Buffer::unbind()
+{
+    glBindBuffer(target, 0);
 }

@@ -31,7 +31,7 @@ void _shader_delete(GLuint *shader)
 }
 
 
-Shader::Shader(GLenum type, std::string source)
+Shader::Shader(GLenum type, std::string source, std::string label)
 :   _id{new GLuint{glCreateShader(type)}, _shader_delete}
 {
     GLchar const *const src = source.c_str();
@@ -47,6 +47,10 @@ Shader::Shader(GLenum type, std::string source)
         infolog.reserve(infolog_size);
         glGetShaderInfoLog(*_id, infolog_size, nullptr, &infolog[0]);
         throw std::runtime_error{"Shader compile failed:\n" + infolog};
+    }
+    if (!label.empty())
+    {
+        glObjectLabel(GL_SHADER, *_id, (GLsizei)label.size(), label.c_str());
     }
 }
 

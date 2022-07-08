@@ -115,7 +115,7 @@ bool castRayThroughScene(
     // Check for sphere intersections.
     for (int i = 0; i < spheres.length(); ++i)
     {
-        Sphere sphere = spheres[i];
+        const Sphere sphere = spheres[i];
         const vec3 c = vec3(sphere.x, sphere.y, sphere.z);
         const float r = sphere.r;
 
@@ -175,7 +175,7 @@ vec3 phongShade(in RayIntersection intersection, in vec3 camera)
     // Shading from all the lights in the scene.
     for (int i = 0; i < lights.length(); ++i)
     {
-        OmniLight light = lights[i];
+        const OmniLight light = lights[i];
         const vec3 lightPos = vec3(light.x, light.y, light.z);
         const vec3 lightColor = vec3(light.r, light.g, light.b);
 
