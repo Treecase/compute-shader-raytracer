@@ -33,7 +33,6 @@ Buffer::Buffer(GLenum target, std::string label)
 ,   target{target}
 {
     glCreateBuffers(1, _id.get());
-    glBindBuffer(target, *_id);
     if (!label.empty())
     {
         glObjectLabel(GL_BUFFER, *_id, (GLsizei)label.size(), label.c_str());
@@ -45,6 +44,10 @@ GLuint Buffer::id() const
     return *_id;
 }
 
+void Buffer::bind() const
+{
+    glBindBuffer(target, *_id);
+}
 void Buffer::bind(GLenum target_)
 {
     GLenum const bound = target_ == GL_NONE? target : target_;
@@ -52,7 +55,7 @@ void Buffer::bind(GLenum target_)
     target = bound;
 }
 
-void Buffer::unbind()
+void Buffer::unbind() const
 {
     glBindBuffer(target, 0);
 }

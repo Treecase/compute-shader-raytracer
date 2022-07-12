@@ -22,7 +22,9 @@
 #include <GL/glew.h>
 #include <glm/glm.hpp>
 
+#include <iostream>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -86,6 +88,20 @@ public:
     void setUniform(std::string uniform, glm::vec3 value) const;
     /** Set a vec4 uniform. */
     void setUniform(std::string uniform, glm::vec4 value) const;
+    /** Set a uniform, ignoring errors. */
+    template<typename T>
+    void setUniformS(std::string const &uniform, T const &value) const
+    {
+        try
+        {
+            setUniform(uniform, value);
+        }
+        catch (std::runtime_error const &e)
+        {
+            std::cerr << "setUniformS(" << uniform <<  "): " << e.what()
+                << "\n";
+        }
+    }
 };
 
 /**
@@ -98,28 +114,35 @@ private:
 public:
     GLenum target;
 
-    /**
-     * WARNING: Creating a Buffer will also cause it to be bound to the passed
-     * target!
-     */
     Buffer(GLenum target, std::string label="");
 
     /** Get the buffer's id. */
     GLuint id() const;
 
-    /**
-     * Bind the buffer. If target is GL_NONE (the default) then this will bind
-     * to the last used target.
-     */
-    void bind(GLenum target=GL_NONE);
+    /** Bind the buffer to the previously used target. */
+    void bind() const;
+    /** Bind the buffer to a new target. */
+    void bind(GLenum target);
     /** Unbind the buffer. */
-    void unbind();
+    void unbind() const;
 
     /** Add data to the buffer. NOTE: The Buffer must be bound first! */
     template<typename T>
     void buffer(GLenum usage, std::vector<T> const &data)
     {
         glBufferData(target, data.size() * sizeof(T), data.data(), usage);
+    }
+    /** Update data in the buffer. NOTE: The Buffer must be bound first! */
+    template<typename T>
+    void update(std::vector<T> const &data, size_t offset=0, size_t count=0)
+    {
+        if (count == 0)
+            count = data.size() - offset;
+        glBufferSubData(
+            target,
+            offset * sizeof(T),
+            count * sizeof(T),
+            data.data() + offset);
     }
 };
 

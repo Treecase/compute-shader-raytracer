@@ -55,7 +55,7 @@ struct Sphere
 {
     Position position;
     GLfloat r;
-    Material material;
+    GLint material;
 };
 
 /**

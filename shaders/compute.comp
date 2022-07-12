@@ -34,7 +34,7 @@ struct Sphere
 {
     float x, y, z;
     float r;
-    Material material;
+    int material_idx;
 };
 
 /**
@@ -52,8 +52,11 @@ layout(std430, binding=0) buffer Spheres
 {
     Sphere spheres[];
 };
-
-layout(std430, binding=1) buffer Lights
+layout(std430, binding=1) buffer Materials
+{
+    Material materials[];
+};
+layout(std430, binding=2) buffer Lights
 {
     OmniLight lights[];
 };
@@ -162,7 +165,7 @@ bool castRayThroughScene(
 vec3 phongShade(in RayIntersection intersection, in vec3 camera)
 {
     // Algorithm from: https://en.wikipedia.org/wiki/Phong_reflection_model
-    const Material material = intersection.object.material;
+    const Material material = materials[intersection.object.material_idx];
 
     // Ambient term.
     vec3 shaded = material.ambient * ambientColor;
@@ -198,6 +201,28 @@ vec3 phongShade(in RayIntersection intersection, in vec3 camera)
         shaded += diffuse + specular;
     }
     return shaded;
+}
+
+
+/**
+ * Calculate the 4x4 Bayer dithered value of the given pixel.
+ *
+ * IN
+ * | value: brightness of the pixel.
+ * | pos: the position of of the pixel in the image.
+ */
+float bayerDither(in float value, in ivec2 pos)
+{
+    // Algorithm from: https://en.wikipedia.org/wiki/Ordered_dithering
+    // 4x4 threshold map.
+    const mat4 M = 0.0625 * mat4(
+         0,  8,  2, 10,
+        12,  4, 14,  6,
+         3, 11,  1,  9,
+        15,  7, 13,  5);
+    const float threshold = M[pos.x % 4][pos.y % 4];
+    // return value + (threshold - 0.5) + 0.5;
+    return float(value >= threshold);
 }
 
 
@@ -255,6 +280,10 @@ void main()
     {
         pixel = vec4(phongShade(intersection, E), 1.0);
     }
+
+    // Dithering effect (for fun :]).
+    const float brightness = (pixel.r + pixel.g + pixel.b) / 3.0;
+    pixel = vec4(pixel.rgb * bayerDither(brightness, pixelCoord), 1.0);
 
     // Write pixel to the output.
     imageStore(outputImg, pixelCoord, pixel);
