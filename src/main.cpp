@@ -237,14 +237,10 @@ struct Scene
 class Renderer
 {
 private:
-    static std::vector<GLfloat> const _screenQuadVertices;
-
     App const &_app;
 
     Program _compute;
-    Program _display;
-    VertexArray _screenQuadVAO;
-    Texture _texture;
+    Texture _renderResult;
 
     Buffer _spheres;
     Buffer _materials;
@@ -253,7 +249,7 @@ private:
     template<typename T>
     void _initComputeBuffer(
         Buffer &buffer, std::string const &buffer_name,
-        std::vector<T> const &data)
+        std::vector<T> const &data) const
     {
         buffer.bind();
         buffer.buffer(GL_STATIC_DRAW, data);
@@ -279,17 +275,94 @@ public:
     ,   _compute{
             {shader_from_file("shaders/compute.comp", GL_COMPUTE_SHADER)},
             "ComputeShader"}
-    ,   _display{
-            {   shader_from_file("shaders/vertex.vert", GL_VERTEX_SHADER),
-                shader_from_file("shaders/fragment.frag", GL_FRAGMENT_SHADER)},
-            "VisualShader"}
-    ,   _screenQuadVAO{"ScreenQuadVAO"}
-    ,   _texture{GL_TEXTURE_2D, "RaytraceResult"}
+    ,   _renderResult{GL_TEXTURE_2D, "RenderResult"}
     ,   _spheres{GL_SHADER_STORAGE_BUFFER, "SphereSSBO"}
     ,   _materials{GL_SHADER_STORAGE_BUFFER, "MaterialSSBO"}
     ,   _lights{GL_SHADER_STORAGE_BUFFER, "LightSSBO"}
     {
-        /* ===[ Screen Quad ]=== */
+        /* ===[ Output Texture ]=== */
+        _renderResult.bind();
+        glTexParameteri(
+            _renderResult.type(), GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(
+            _renderResult.type(), GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glTexParameteri(
+            _renderResult.type(), GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glTexParameteri(
+            _renderResult.type(), GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexImage2D(
+            _renderResult.type(), 0, GL_RGBA32F, app.window_width,
+            app.window_height, 0, GL_RGBA, GL_FLOAT, nullptr);
+        glBindImageTexture(
+            0, _renderResult.id(), 0, GL_FALSE, 0, GL_READ_WRITE, GL_RGBA32F);
+        _renderResult.unbind();
+        // Since the compute shader's output texture must match the window
+        // size, we must resize it whenever the app's window size changes.
+        app.add_callback(
+            SDL_WINDOWEVENT,
+            [&](SDL_Event event){
+                if (event.window.event == SDL_WINDOWEVENT_RESIZED)
+                {
+                    _renderResult.bind();
+                    glTexImage2D(
+                        _renderResult.type(), 0, GL_RGBA32F, event.window.data1,
+                        event.window.data2, 0, GL_RGBA, GL_FLOAT, nullptr);
+                    _renderResult.unbind();
+                }
+            });
+        /* ===[ Create Scene Data Buffers ]=== */
+        // Init Spheres SSBO.
+        _initComputeBuffer(_spheres, "Spheres", scene.spheres);
+        // Init Materials SSBO.
+        _initComputeBuffer(_materials, "Materials", scene.materials);
+        // Init Lights SSBO.
+        _initComputeBuffer(_lights, "Lights", scene.lights);
+    }
+
+    /** Get the render result. */
+    Texture const &getResult() const
+    {
+        return _renderResult;
+    }
+
+    /** Render the scene. */
+    void render() const
+    {
+        // Use the compute shader.
+        _compute.use();
+        // Set output texture uniform.
+        glActiveTexture(GL_TEXTURE0);
+        _renderResult.bind();
+        _compute.setUniformS("outputImg", 0);
+        // Set ambient color uniform.
+        _compute.setUniformS("ambientColor", ambientColor);
+        // Set blank color.
+        _compute.setUniformS("blankColor", blankColor);
+        // Run the compute shader.
+        glDispatchCompute(
+            (GLuint)_app.window_width, (GLuint)_app.window_height, 1);
+        // Wait for the shader to finish writing to the image.
+        glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+    }
+};
+
+
+/** Displays a render result texture to the screen. */
+class RenderResultDisplay
+{
+private:
+    static std::vector<GLfloat> const _screenQuadVertices;
+    Program const _display;
+    VertexArray const _screenQuadVAO;
+public:
+    RenderResultDisplay()
+    :   _display{
+            {   shader_from_file("shaders/vertex.vert", GL_VERTEX_SHADER),
+                shader_from_file("shaders/fragment.frag", GL_FRAGMENT_SHADER)},
+            "RenderDisplayShader"}
+    ,   _screenQuadVAO{"ScreenQuadVAO"}
+    {
+        /* ===[ Create ScreenQuad ]=== */
         _screenQuadVAO.bind();
         // Create vertex data buffer.
         Buffer vbo{GL_ARRAY_BUFFER, "ScreenQuadVBO"};
@@ -305,62 +378,11 @@ public:
         vbo.unbind();
         // Unbind screen quad VAO.
         _screenQuadVAO.unbind();
-
-        /* ===[ Compute Shader Output Texture ]=== */
-        _texture.bind();
-        glTexParameteri(_texture.type(), GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-        glTexParameteri(_texture.type(), GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-        glTexParameteri(_texture.type(), GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-        glTexParameteri(_texture.type(), GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-        glTexImage2D(
-            _texture.type(), 0, GL_RGBA32F, app.window_width, app.window_height,
-            0, GL_RGBA, GL_FLOAT, nullptr);
-        glBindImageTexture(
-            0, _texture.id(), 0, GL_FALSE, 0, GL_READ_WRITE, GL_RGBA32F);
-        _texture.unbind();
-        // Since the compute shader's output texture must match the window
-        // size, we must resize it whenever the app's window size changes.
-        app.add_callback(
-            SDL_WINDOWEVENT,
-            [&](SDL_Event event){
-                if (event.window.event == SDL_WINDOWEVENT_RESIZED)
-                {
-                    _texture.bind();
-                    glTexImage2D(
-                        _texture.type(), 0, GL_RGBA32F, event.window.data1,
-                        event.window.data2, 0, GL_RGBA, GL_FLOAT, nullptr);
-                    _texture.unbind();
-                }
-            });
-
-        // Init Spheres SSBO.
-        _initComputeBuffer(_spheres, "Spheres", scene.spheres);
-        // Init Materials SSBO.
-        _initComputeBuffer(_materials, "Materials", scene.materials);
-        // Init Lights SSBO.
-        _initComputeBuffer(_lights, "Lights", scene.lights);
     }
 
-    /** Render the scene. */
-    void render() const
+    /** Draw the result to the screen. */
+    void draw(Texture const &result) const
     {
-        /* ===[ Execute Compute Shader ]=== */
-        // Use the compute shader.
-        _compute.use();
-        // Set output texture uniform.
-        glActiveTexture(GL_TEXTURE0);
-        _compute.setUniformS("outputImg", 0);
-        // Set ambient color uniform.
-        _compute.setUniformS("ambientColor", ambientColor);
-        // Set blank color.
-        _compute.setUniformS("blankColor", blankColor);
-        // Run the compute shader.
-        glDispatchCompute(
-            (GLuint)_app.window_width, (GLuint)_app.window_height, 1);
-        // Wait for the shader to finish writing to the image.
-        glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
-
-        /* ===[ Draw the Screenquad ]=== */
         // Clear the screen.
         glClearColor(0.0, 0.0, 0.0, 1.0);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -370,14 +392,14 @@ public:
         _screenQuadVAO.bind();
         // Use the compute output texture as the input texture.
         glActiveTexture(GL_TEXTURE0);
-        _texture.bind();
+        result.bind();
         _display.setUniformS("tex", 0);
         // Render the screenquad.
         glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(_screenQuadVertices.size()/5));
     }
 };
 
-std::vector<GLfloat> const Renderer::_screenQuadVertices{
+std::vector<GLfloat> const RenderResultDisplay::_screenQuadVertices{
     // Positions        Texcoords
     // Top right tri
    -1.0f,  1.0f, 0.0f,  0.0f, 1.0f, // tl
@@ -396,6 +418,7 @@ int run(int argc, char *argv[])
     /* ===[ Initialization ]=== */
     init_SDL();
     App app{"compute", 640, 480};
+    RenderResultDisplay result_display{};
 
     /* ===[ Scene Definition ]=== */
     Scene const scene{
@@ -441,6 +464,7 @@ int run(int argc, char *argv[])
 
         // Render the scene.
         renderer.render();
+        result_display.draw(renderer.getResult());
         app.updateScreen();
     }
     return EXIT_SUCCESS;
