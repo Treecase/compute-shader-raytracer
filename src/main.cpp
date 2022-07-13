@@ -269,6 +269,10 @@ private:
 public:
     glm::vec3 ambientColor;
     glm::vec3 blankColor;
+    glm::vec3 eyePosition;
+    glm::vec3 eyeForward;
+    glm::vec3 eyeUp;
+    GLfloat fov;
 
     Renderer(App &app, Scene const &scene)
     :   _app{app}
@@ -338,6 +342,14 @@ public:
         _compute.setUniformS("ambientColor", ambientColor);
         // Set blank color.
         _compute.setUniformS("blankColor", blankColor);
+        // Set eye position.
+        _compute.setUniformS("eyePosition", eyePosition);
+        // Set camera up vector.
+        _compute.setUniformS("eyeUp", eyeUp);
+        // Set camera forward vector.
+        _compute.setUniformS("eyeForward", eyeForward);
+        // Set FOV.
+        _compute.setUniformS("fov", fov);
         // Run the compute shader.
         glDispatchCompute(
             (GLuint)_app.window_width, (GLuint)_app.window_height, 1);
@@ -455,6 +467,10 @@ int run(int argc, char *argv[])
     Renderer renderer{app, scene};
     renderer.ambientColor = glm::vec3{0.0f, 0.05f, 0.1f};
     renderer.blankColor = glm::vec3{0.2f, 0.0f, 0.2f};
+    renderer.eyePosition = glm::vec3{0.0f, 0.0f, 0.0f};
+    renderer.eyeForward = glm::vec3{0.0f, 0.0f, -1.0f};
+    renderer.eyeUp = glm::vec3{0.0f, 1.0f, 0.0f};
+    renderer.fov = glm::radians(90.0f);
 
     /* ===[ Main Loop ]=== */
     for (; app.running;)
