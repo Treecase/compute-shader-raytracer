@@ -76,6 +76,8 @@ public:
     void use() const;
     /** Get the program's id. */
     GLuint id() const;
+    /** Set a boolean uniform. */
+    void setUniform(std::string uniform, bool value) const;
     /** Set a floating-point uniform. */
     void setUniform(std::string uniform, GLfloat value) const;
     /** Set an integer uniform. */

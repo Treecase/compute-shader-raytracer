@@ -170,6 +170,7 @@ void RenderResultDisplay::draw(Texture const &result) const
     glActiveTexture(GL_TEXTURE0);
     result.bind();
     _display.setUniformS("tex", 0);
+    _display.setUniformS("dithering", dithering);
     // Render the screenquad.
     glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(_screenQuadVertices.size()/5));
 }

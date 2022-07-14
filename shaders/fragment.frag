@@ -7,6 +7,7 @@ in vec2 fTexCoords;
 out vec4 FragColor;
 
 uniform sampler2D tex;
+uniform bool dithering;
 
 
 /**
@@ -34,12 +35,12 @@ float bayerDither(in float value, in ivec2 pos)
 void main()
 {
     const ivec2 pixelPos = ivec2(gl_FragCoord.xy);
-    const vec4 color = texture(tex, fTexCoords);
-
-    // Dithering effect (for fun :]).
-    const float brightness = (color.r + color.g + color.b) / 3.0;
-    const vec4 dithered = vec4(color.rgb * bayerDither(brightness, pixelPos), 1.0);
-
-    FragColor = dithered;
-    // FragColor = color;
+    vec4 color = texture(tex, fTexCoords);
+    if (dithering)
+    {
+        // Dithering effect (for fun :]).
+        const float brightness = (color.r + color.g + color.b) / 3.0;
+        color = vec4(color.rgb * bayerDither(brightness, pixelPos), 1.0);
+    }
+    FragColor = color;
 }

@@ -248,6 +248,16 @@ int run(int argc, char *argv[])
                     event.window.data1, event.window.data2);
             }
         });
+    // Keybind to toggle dithering with the spacebar.
+    app.add_callback(
+        SDL_KEYDOWN,
+        [&result_display](SDL_Event event){
+            if (event.key.keysym.sym == SDLK_SPACE)
+            {
+                result_display.dithering = !result_display.dithering;
+            }
+        }
+    );
 
     /* ===[ Main Loop ]=== */
     for (; app.running;)

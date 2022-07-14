@@ -72,6 +72,11 @@ GLuint Program::id() const
     return *_id;
 }
 
+void Program::setUniform(std::string uniform, bool value) const
+{
+    glUniform1i(_getUniformLocation(uniform), value);
+}
+
 void Program::setUniform(std::string uniform, GLfloat value) const
 {
     glUniform1f(_getUniformLocation(uniform), value);

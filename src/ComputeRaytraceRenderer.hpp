@@ -102,6 +102,8 @@ private:
     Program const _display;
     VertexArray const _screenQuadVAO;
 public:
+    bool dithering;
+
     RenderResultDisplay();
 
     /** Draw the result to the screen. */
