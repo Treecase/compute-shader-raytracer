@@ -195,6 +195,9 @@ public:
     void bind() const;
     /** Unbind the texture. */
     void unbind() const;
+
+    /** Set a Texture parameter. NOTE: The Texture must be bound first! */
+    void setParameter(GLenum pname, GLint param);
 };
 
 #endif

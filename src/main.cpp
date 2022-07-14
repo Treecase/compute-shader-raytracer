@@ -237,14 +237,14 @@ struct Scene
 class Renderer
 {
 private:
-    App const &_app;
-
     Program _compute;
     Texture _renderResult;
 
     Buffer _spheres;
     Buffer _materials;
     Buffer _lights;
+
+    GLuint _width, _height;
 
     template<typename T>
     void _initComputeBuffer(
@@ -274,46 +274,29 @@ public:
     glm::vec3 eyeUp;
     GLfloat fov;
 
-    Renderer(App &app, Scene const &scene)
-    :   _app{app}
-    ,   _compute{
+    Renderer(Scene const &scene, GLuint width, GLuint height)
+    :   _compute{
             {shader_from_file("shaders/compute.comp", GL_COMPUTE_SHADER)},
             "ComputeShader"}
     ,   _renderResult{GL_TEXTURE_2D, "RenderResult"}
     ,   _spheres{GL_SHADER_STORAGE_BUFFER, "SphereSSBO"}
     ,   _materials{GL_SHADER_STORAGE_BUFFER, "MaterialSSBO"}
     ,   _lights{GL_SHADER_STORAGE_BUFFER, "LightSSBO"}
+    ,   _width{width}
+    ,   _height{height}
     {
         /* ===[ Output Texture ]=== */
         _renderResult.bind();
-        glTexParameteri(
-            _renderResult.type(), GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-        glTexParameteri(
-            _renderResult.type(), GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-        glTexParameteri(
-            _renderResult.type(), GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-        glTexParameteri(
-            _renderResult.type(), GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        _renderResult.setParameter(GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        _renderResult.setParameter(GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        _renderResult.setParameter(GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        _renderResult.setParameter(GL_TEXTURE_MIN_FILTER, GL_NEAREST);
         glTexImage2D(
-            _renderResult.type(), 0, GL_RGBA32F, app.window_width,
-            app.window_height, 0, GL_RGBA, GL_FLOAT, nullptr);
+            _renderResult.type(), 0, GL_RGBA32F, _width, _height, 0, GL_RGBA,
+            GL_FLOAT, nullptr);
         glBindImageTexture(
             0, _renderResult.id(), 0, GL_FALSE, 0, GL_READ_WRITE, GL_RGBA32F);
         _renderResult.unbind();
-        // Since the compute shader's output texture must match the window
-        // size, we must resize it whenever the app's window size changes.
-        app.add_callback(
-            SDL_WINDOWEVENT,
-            [&](SDL_Event event){
-                if (event.window.event == SDL_WINDOWEVENT_RESIZED)
-                {
-                    _renderResult.bind();
-                    glTexImage2D(
-                        _renderResult.type(), 0, GL_RGBA32F, event.window.data1,
-                        event.window.data2, 0, GL_RGBA, GL_FLOAT, nullptr);
-                    _renderResult.unbind();
-                }
-            });
         /* ===[ Create Scene Data Buffers ]=== */
         // Init Spheres SSBO.
         _initComputeBuffer(_spheres, "Spheres", scene.spheres);
@@ -327,6 +310,18 @@ public:
     Texture const &getResult() const
     {
         return _renderResult;
+    }
+
+    /** Set the render output dimensions. */
+    void setRenderDimensions(GLuint width, GLuint height)
+    {
+        _width = width;
+        _height = height;
+        _renderResult.bind();
+        glTexImage2D(
+            _renderResult.type(), 0, GL_RGBA32F, _width, _height, 0, GL_RGBA,
+            GL_FLOAT, nullptr);
+        _renderResult.unbind();
     }
 
     /** Render the scene. */
@@ -351,8 +346,7 @@ public:
         // Set FOV.
         _compute.setUniformS("fov", fov);
         // Run the compute shader.
-        glDispatchCompute(
-            (GLuint)_app.window_width, (GLuint)_app.window_height, 1);
+        glDispatchCompute(_width, _height, 1);
         // Wait for the shader to finish writing to the image.
         glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
     }
@@ -464,13 +458,25 @@ int run(int argc, char *argv[])
     };
 
     /* ===[ Create Renderer ]=== */
-    Renderer renderer{app, scene};
+    Renderer renderer{
+        scene, (GLuint)app.window_width, (GLuint)app.window_height};
     renderer.ambientColor = glm::vec3{0.0f, 0.05f, 0.1f};
     renderer.blankColor = glm::vec3{0.2f, 0.0f, 0.2f};
     renderer.eyePosition = glm::vec3{0.0f, 0.0f, 0.0f};
     renderer.eyeForward = glm::vec3{0.0f, 0.0f, -1.0f};
     renderer.eyeUp = glm::vec3{0.0f, 1.0f, 0.0f};
     renderer.fov = glm::radians(90.0f);
+    // Since we want the Renderer's output size to match the window's size, we
+    // must resize it whenever the app's window size changes.
+    app.add_callback(
+        SDL_WINDOWEVENT,
+        [&renderer](SDL_Event event){
+            if (event.window.event == SDL_WINDOWEVENT_RESIZED)
+            {
+                renderer.setRenderDimensions(
+                    event.window.data1, event.window.data2);
+            }
+        });
 
     /* ===[ Main Loop ]=== */
     for (; app.running;)

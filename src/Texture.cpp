@@ -59,3 +59,8 @@ void Texture::unbind() const
 {
     glBindTexture(_type, 0);
 }
+
+void Texture::setParameter(GLenum pname, GLint param)
+{
+    glTexParameteri(_type, pname, param);
+}
