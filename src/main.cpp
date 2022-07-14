@@ -1,5 +1,5 @@
 /**
- * main.cpp - Compute shaders demo.
+ * main.cpp - Raytracer demo using SDL2.
  * Copyright (C) 2022 Trevor Last
  *
  *  This program is free software: you can redistribute it and/or modify
@@ -18,15 +18,11 @@
 
 #include "glUtil.hpp"
 #include "ShaderStructs.hpp"
+#include "ComputeRaytraceRenderer.hpp"
 
-#include <GL/glew.h>
 #include <SDL.h>
 
-#include <fstream>
 #include <functional>
-#include <iostream>
-#include <sstream>
-#include <string>
 #include <unordered_map>
 
 
@@ -76,21 +72,6 @@ void init_OpenGL()
 }
 
 
-/** Callback to print OpenGL debug messages. */
-void opengl_debug_message_callback(
-    GLenum source, GLenum type, GLuint id,
-    GLenum severity, GLsizei length, GLchar const *message,
-    void const *userParam)
-{
-    std::cout << "OpenGL: ";
-    if (type == GL_DEBUG_TYPE_ERROR)
-    {
-        std::cout << "** GL ERROR ** ";
-    }
-    std::cout << message << "\n";
-}
-
-
 /**
  * The application.
  */
@@ -122,9 +103,6 @@ public:
     ,   running{true}
     {
         init_OpenGL();
-        glViewport(0, 0, window_width, window_height);
-        glEnable(GL_DEBUG_OUTPUT);
-        glDebugMessageCallback(opengl_debug_message_callback, nullptr);
     }
 
     ~App()
@@ -194,17 +172,6 @@ public:
 };
 
 
-/** Load a GLSL Shader from a file. */
-Shader shader_from_file(std::string path, GLenum type)
-{
-    std::ifstream shaderfile{path.c_str()};
-    std::stringstream srcstream{};
-    srcstream << shaderfile.rdbuf();
-    shaderfile.close();
-    return Shader{type, srcstream.str(), path};
-}
-
-
 /** SDL initialization. */
 void init_SDL()
 {
@@ -220,202 +187,6 @@ void init_SDL()
         SDL_GL_SetSwapInterval(1);
     }
 }
-
-
-/**
- * Holds all the data needed to render an image with the raytracer.
- */
-struct Scene
-{
-    std::vector<Material> materials;
-    std::vector<Sphere> spheres;
-    std::vector<OmniLight> lights;
-};
-
-
-/** Renderers for SceneRenderables. */
-class Renderer
-{
-private:
-    Program _compute;
-    Texture _renderResult;
-
-    Buffer _spheres;
-    Buffer _materials;
-    Buffer _lights;
-
-    GLuint _width, _height;
-
-    template<typename T>
-    void _initComputeBuffer(
-        Buffer &buffer, std::string const &buffer_name,
-        std::vector<T> const &data) const
-    {
-        buffer.bind();
-        buffer.buffer(GL_STATIC_DRAW, data);
-        // Set the SSBO's binding point.
-        auto binding = glGetProgramResourceIndex(
-            _compute.id(), GL_SHADER_STORAGE_BLOCK, buffer_name.c_str());
-        if (binding == GL_INVALID_INDEX)
-        {
-            throw std::runtime_error{
-                "glGetProgramResourceIndex - no shader storage block named "
-                "'Spheres'"};
-        }
-        glBindBufferBase(buffer.target, binding, buffer.id());
-        buffer.unbind();
-    }
-
-public:
-    glm::vec3 ambientColor;
-    glm::vec3 blankColor;
-    glm::vec3 eyePosition;
-    glm::vec3 eyeForward;
-    glm::vec3 eyeUp;
-    GLfloat fov;
-
-    Renderer(Scene const &scene, GLuint width, GLuint height)
-    :   _compute{
-            {shader_from_file("shaders/compute.comp", GL_COMPUTE_SHADER)},
-            "ComputeShader"}
-    ,   _renderResult{GL_TEXTURE_2D, "RenderResult"}
-    ,   _spheres{GL_SHADER_STORAGE_BUFFER, "SphereSSBO"}
-    ,   _materials{GL_SHADER_STORAGE_BUFFER, "MaterialSSBO"}
-    ,   _lights{GL_SHADER_STORAGE_BUFFER, "LightSSBO"}
-    ,   _width{width}
-    ,   _height{height}
-    {
-        /* ===[ Output Texture ]=== */
-        _renderResult.bind();
-        _renderResult.setParameter(GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-        _renderResult.setParameter(GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-        _renderResult.setParameter(GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-        _renderResult.setParameter(GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-        glTexImage2D(
-            _renderResult.type(), 0, GL_RGBA32F, _width, _height, 0, GL_RGBA,
-            GL_FLOAT, nullptr);
-        glBindImageTexture(
-            0, _renderResult.id(), 0, GL_FALSE, 0, GL_READ_WRITE, GL_RGBA32F);
-        _renderResult.unbind();
-        /* ===[ Create Scene Data Buffers ]=== */
-        // Init Spheres SSBO.
-        _initComputeBuffer(_spheres, "Spheres", scene.spheres);
-        // Init Materials SSBO.
-        _initComputeBuffer(_materials, "Materials", scene.materials);
-        // Init Lights SSBO.
-        _initComputeBuffer(_lights, "Lights", scene.lights);
-    }
-
-    /** Get the render result. */
-    Texture const &getResult() const
-    {
-        return _renderResult;
-    }
-
-    /** Set the render output dimensions. */
-    void setRenderDimensions(GLuint width, GLuint height)
-    {
-        _width = width;
-        _height = height;
-        _renderResult.bind();
-        glTexImage2D(
-            _renderResult.type(), 0, GL_RGBA32F, _width, _height, 0, GL_RGBA,
-            GL_FLOAT, nullptr);
-        _renderResult.unbind();
-    }
-
-    /** Render the scene. */
-    void render() const
-    {
-        // Use the compute shader.
-        _compute.use();
-        // Set output texture uniform.
-        glActiveTexture(GL_TEXTURE0);
-        _renderResult.bind();
-        _compute.setUniformS("outputImg", 0);
-        // Set ambient color uniform.
-        _compute.setUniformS("ambientColor", ambientColor);
-        // Set blank color.
-        _compute.setUniformS("blankColor", blankColor);
-        // Set eye position.
-        _compute.setUniformS("eyePosition", eyePosition);
-        // Set camera up vector.
-        _compute.setUniformS("eyeUp", eyeUp);
-        // Set camera forward vector.
-        _compute.setUniformS("eyeForward", eyeForward);
-        // Set FOV.
-        _compute.setUniformS("fov", fov);
-        // Run the compute shader.
-        glDispatchCompute(_width, _height, 1);
-        // Wait for the shader to finish writing to the image.
-        glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
-    }
-};
-
-
-/** Displays a render result texture to the screen. */
-class RenderResultDisplay
-{
-private:
-    static std::vector<GLfloat> const _screenQuadVertices;
-    Program const _display;
-    VertexArray const _screenQuadVAO;
-public:
-    RenderResultDisplay()
-    :   _display{
-            {   shader_from_file("shaders/vertex.vert", GL_VERTEX_SHADER),
-                shader_from_file("shaders/fragment.frag", GL_FRAGMENT_SHADER)},
-            "RenderDisplayShader"}
-    ,   _screenQuadVAO{"ScreenQuadVAO"}
-    {
-        /* ===[ Create ScreenQuad ]=== */
-        _screenQuadVAO.bind();
-        // Create vertex data buffer.
-        Buffer vbo{GL_ARRAY_BUFFER, "ScreenQuadVBO"};
-        vbo.bind();
-        vbo.buffer(GL_STATIC_DRAW, _screenQuadVertices);
-        // Link position vertex attribute.
-        _screenQuadVAO.enableVertexAttribArray(
-            0, 3, GL_FLOAT, 5*sizeof(GLfloat));
-        // Link texcoord vertex attribute.
-        _screenQuadVAO.enableVertexAttribArray(
-            1, 2, GL_FLOAT, 5*sizeof(GLfloat), (3*sizeof(GLfloat)));
-        // Unbind vertex data buffer.
-        vbo.unbind();
-        // Unbind screen quad VAO.
-        _screenQuadVAO.unbind();
-    }
-
-    /** Draw the result to the screen. */
-    void draw(Texture const &result) const
-    {
-        // Clear the screen.
-        glClearColor(0.0, 0.0, 0.0, 1.0);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-        // Use the screenquad shader.
-        _display.use();
-        // Bind screenquad VAO.
-        _screenQuadVAO.bind();
-        // Use the compute output texture as the input texture.
-        glActiveTexture(GL_TEXTURE0);
-        result.bind();
-        _display.setUniformS("tex", 0);
-        // Render the screenquad.
-        glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(_screenQuadVertices.size()/5));
-    }
-};
-
-std::vector<GLfloat> const RenderResultDisplay::_screenQuadVertices{
-    // Positions        Texcoords
-    // Top right tri
-   -1.0f,  1.0f, 0.0f,  0.0f, 1.0f, // tl
-    1.0f,  1.0f, 0.0f,  1.0f, 1.0f, // tr
-    1.0f, -1.0f, 0.0f,  1.0f, 0.0f, // br
-    // Bottom left tri
-    1.0f, -1.0f, 0.0f,  1.0f, 0.0f, // br
-   -1.0f, -1.0f, 0.0f,  0.0f, 0.0f, // bl
-   -1.0f,  1.0f, 0.0f,  0.0f, 1.0f, // tl
-};
 
 
 /** Main program body. */
@@ -458,7 +229,7 @@ int run(int argc, char *argv[])
     };
 
     /* ===[ Create Renderer ]=== */
-    Renderer renderer{
+    ComputeRaytraceRenderer renderer{
         scene, (GLuint)app.window_width, (GLuint)app.window_height};
     renderer.ambientColor = glm::vec3{0.0f, 0.05f, 0.1f};
     renderer.blankColor = glm::vec3{0.2f, 0.0f, 0.2f};

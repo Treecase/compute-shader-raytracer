@@ -27,6 +27,7 @@ set(src
     src/Buffer.cpp
     src/VertexArray.cpp
     src/Texture.cpp
+    src/ComputeRaytraceRenderer.cpp
 )
 
 add_executable(compute "${src}")
