@@ -62,6 +62,12 @@ ComputeRaytraceRenderer::ComputeRaytraceRenderer(Scene const &scene, GLuint widt
 ,   _lights{GL_SHADER_STORAGE_BUFFER, "LightSSBO"}
 ,   _width{width}
 ,   _height{height}
+,   ambientColor{0.0f}
+,   blankColor{0.0f}
+,   eyePosition{0.0f}
+,   eyeForward{0.0f, 0.0f, -1.0f}
+,   eyeUp{0.0f, 1.0f, 0.0f}
+,   fov{90.0f}
 {
     glViewport(0, 0, _width, _height);
     glEnable(GL_DEBUG_OUTPUT);
@@ -138,6 +144,7 @@ RenderResultDisplay::RenderResultDisplay()
             shader_from_file("shaders/fragment.frag", GL_FRAGMENT_SHADER)},
         "RenderDisplayShader"}
 ,   _screenQuadVAO{"ScreenQuadVAO"}
+,   dithering{false}
 {
     /* ===[ Create ScreenQuad ]=== */
     _screenQuadVAO.bind();
